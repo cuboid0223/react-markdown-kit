@@ -1,0 +1,17 @@
+{
+  "header": "# Changelog\n\nAll notable changes are documented here. This file is generated from Conventional Commits.\n",
+  "types": [
+    { "type": "feat", "section": "Features" },
+    { "type": "fix", "section": "Bug Fixes" },
+    { "type": "perf", "section": "Performance" },
+    { "type": "refactor", "section": "Refactors" },
+    { "type": "docs", "section": "Documentation" },
+    { "type": "build", "section": "Build System" },
+    { "type": "ci", "hidden": true },
+    { "type": "test", "hidden": true },
+    { "type": "chore", "hidden": true },
+    { "type": "style", "hidden": true }
+  ],
+  "commitUrlFormat": "https://github.com/your-org/react-markdown-kit/commit/{{hash}}",
+  "compareUrlFormat": "https://github.com/your-org/react-markdown-kit/compare/{{previousTag}}...{{currentTag}}"
+}

@@ -1,0 +1,27 @@
+/*
+ * Library stylesheet — compiled to `dist/styles.css` at build time.
+ *
+ * Intentionally does NOT import Tailwind Preflight, so importing this file
+ * will not reset the consuming app's global styles. Only the prose/typography
+ * rules and the handful of utilities our components actually use are emitted.
+ */
+@layer theme, base, components, utilities;
+
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+@plugin "@tailwindcss/typography";
+
+/*
+ * Brand tokens — 👉 replace with real company values.
+ * These feed utilities like `text-brand-heading`, `border-brand-quote`, etc.
+ */
+@theme {
+  --color-brand-heading: #0b3d91;
+  --color-brand-link: #1d4ed8;
+  --color-brand-code: #b5179e;
+  --color-brand-quote: #cbd2d9;
+}
+
+/* Scan our own components so their classes end up in the output. */
+@source "../**/*.{ts,tsx}";
