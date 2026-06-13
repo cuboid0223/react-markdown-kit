@@ -27,6 +27,12 @@ export interface UseConsentOptions {
    * Forwarded to {@link normalizeConsent}; ignored when `data` is provided.
    */
   locale?: string;
+  /**
+   * Locale codes the backend emits, forwarded to {@link normalizeConsent} on the
+   * client-fetch path so stray body lines can't be mistaken for locale markers.
+   * Ignored when `data` is provided. See `NormalizeConsentOptions.knownLocales`.
+   */
+  knownLocales?: string[];
   /** Options forwarded to the markdown renderer for the body. */
   markdown?: UseMarkdownOptions;
 }
@@ -65,6 +71,7 @@ export function useConsent({
   data: dataProp,
   fetchOptions,
   locale,
+  knownLocales,
   markdown,
 }: UseConsentOptions): UseConsentResult {
   const [fetched, setFetched] = useState<ConsentData | undefined>(undefined);
@@ -95,7 +102,7 @@ export function useConsent({
     })
       .then(async (res) => {
         if (!res.ok) throw new Error(`consent fetch failed: ${res.status}`);
-        return normalizeConsent(await res.json(), { locale });
+        return normalizeConsent(await res.json(), { locale, knownLocales });
       })
       .then((normalized) => {
         setFetched(normalized);
@@ -110,7 +117,7 @@ export function useConsent({
     return () => controller.abort();
     // Re-fetch only when the request inputs change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shouldFetch, locale, fetchOptions?.endpoint, fetchOptions?.method, JSON.stringify(fetchOptions?.payload)]);
+  }, [shouldFetch, locale, JSON.stringify(knownLocales), fetchOptions?.endpoint, fetchOptions?.method, JSON.stringify(fetchOptions?.payload)]);
 
   const data = dataProp ?? fetched;
 
@@ -118,10 +125,24 @@ export function useConsent({
     initialChecked(data),
   );
 
-  // Reset checkbox state whenever the underlying document changes.
+  // Reset checkbox state only when the underlying *document* changes — keyed on
+  // the stable `version` (consent is per-version; locale is pure i18n), not the
+  // `data` object identity. Keying on identity reset the user's ticks on every
+  // unrelated parent re-render that recreated `data`, which silently undid
+  // `toggle`. Falls back to the body text when a payload carries no version.
+  //
+  // The checkbox count is folded in as a structural guard: switching locale on
+  // the same version keeps ticks (parallel boxes, just translated labels) — but
+  // if the box *count* differs across that version (e.g. a locale missing a
+  // line), we reset rather than carry a tick onto a different clause. We trust
+  // ordering and don't compare labels, since translations legitimately differ.
+  const docKey = `${data?.version ?? data?.contentMarkdown ?? ''}#${
+    data?.checkboxes.length ?? 0
+  }`;
   useEffect(() => {
     setChecked(initialChecked(data));
-  }, [data]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [docKey]);
 
   const toggle = useCallback((id: string) => {
     setChecked((prev) => ({ ...prev, [id]: !prev[id] }));

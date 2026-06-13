@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { useState } from 'react';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { useConsent } from '../src/hooks/useConsent';
 import type { ConsentData } from '../src/types';
@@ -46,6 +47,103 @@ describe('useConsent', () => {
 
     fireEvent.click(screen.getByTestId('cb-r'));
     expect(screen.getByTestId('gate')).toHaveTextContent('true');
+  });
+
+  it('keeps ticks across a re-render that recreates data with the same version', () => {
+    // Recreates the `data` object on every render (a common consumer mistake),
+    // keeping the same `version`. The user's tick must survive it.
+    function ReRenderingHarness() {
+      const [, force] = useState(0);
+      const fresh: ConsentData = {
+        title: 'Versioned',
+        contentMarkdown: '# Versioned',
+        status: 'pending',
+        version: 'v1',
+        checkboxes: [{ id: 'r', label: 'required', required: true }],
+      };
+      return (
+        <div>
+          <button data-testid="rerender" onClick={() => force((n) => n + 1)}>
+            rerender
+          </button>
+          <Harness data={fresh} />
+        </div>
+      );
+    }
+
+    render(<ReRenderingHarness />);
+    fireEvent.click(screen.getByTestId('cb-r'));
+    expect(screen.getByTestId('cb-r')).toHaveTextContent('r:true');
+
+    fireEvent.click(screen.getByTestId('rerender'));
+    // Same version → not a new document → tick persists.
+    expect(screen.getByTestId('cb-r')).toHaveTextContent('r:true');
+    expect(screen.getByTestId('gate')).toHaveTextContent('true');
+  });
+
+  it('resets ticks when the document version changes', () => {
+    function VersionSwitcher() {
+      const [v, setV] = useState('v1');
+      const data: ConsentData = {
+        title: 'Doc',
+        contentMarkdown: '# Doc',
+        status: 'pending',
+        version: v,
+        checkboxes: [{ id: 'r', label: 'required', required: true }],
+      };
+      return (
+        <div>
+          <button data-testid="bump" onClick={() => setV('v2')}>
+            bump
+          </button>
+          <Harness data={data} />
+        </div>
+      );
+    }
+
+    render(<VersionSwitcher />);
+    fireEvent.click(screen.getByTestId('cb-r'));
+    expect(screen.getByTestId('cb-r')).toHaveTextContent('r:true');
+
+    fireEvent.click(screen.getByTestId('bump'));
+    // New version → new document → ticks reset to defaults.
+    expect(screen.getByTestId('cb-r')).toHaveTextContent('r:false');
+  });
+
+  it('resets when the checkbox count changes under the same version', () => {
+    // Same version but a different number of boxes (e.g. a locale that dropped a
+    // line) must not carry a tick onto a different clause.
+    function CountSwitcher() {
+      const [two, setTwo] = useState(false);
+      const data: ConsentData = {
+        title: 'Doc',
+        contentMarkdown: '# Doc',
+        status: 'pending',
+        version: 'v1',
+        checkboxes: two
+          ? [
+              { id: 'r', label: 'a', required: true },
+              { id: 's', label: 'b', required: true },
+            ]
+          : [{ id: 'r', label: 'a', required: true }],
+      };
+      return (
+        <div>
+          <button data-testid="add" onClick={() => setTwo(true)}>
+            add
+          </button>
+          <Harness data={data} />
+        </div>
+      );
+    }
+
+    render(<CountSwitcher />);
+    fireEvent.click(screen.getByTestId('cb-r'));
+    expect(screen.getByTestId('cb-r')).toHaveTextContent('r:true');
+
+    fireEvent.click(screen.getByTestId('add'));
+    // Box count changed → defensive reset rather than mis-mapping the tick.
+    expect(screen.getByTestId('cb-r')).toHaveTextContent('r:false');
   });
 
   it('fetches via fetchOptions and normalizes the response', async () => {

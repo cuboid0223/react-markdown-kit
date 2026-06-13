@@ -59,6 +59,26 @@ describe('normalizeConsent', () => {
     expect(data.checkboxes).toHaveLength(1);
   });
 
+  it('does not split on a stray body line when knownLocales is given', () => {
+    // `ok` is locale-shaped, so without a whitelist it would open a bogus
+    // segment and drop everything after it.
+    const strayRaw = {
+      content: 'en\n# Title\nReply below.\n\nok\n\nMore terms.\n- [] agree',
+    };
+
+    // Legacy (no whitelist): `ok` is treated as a marker and truncates the doc.
+    const legacy = normalizeConsent(strayRaw, { locale: 'en' });
+    expect(legacy.contentMarkdown).not.toContain('More terms.');
+
+    // With a whitelist: only `en` is a marker, so the body stays intact.
+    const guarded = normalizeConsent(strayRaw, {
+      locale: 'en',
+      knownLocales: ['en', 'zh-TW'],
+    });
+    expect(guarded.contentMarkdown).toContain('More terms.');
+    expect(guarded.checkboxes).toHaveLength(1);
+  });
+
   it('throws on a non-object payload', () => {
     expect(() => normalizeConsent(null)).toThrow(ConsentNormalizeError);
   });

@@ -17,6 +17,15 @@ export interface NormalizeConsentOptions {
    * when omitted or not found.
    */
   locale?: string;
+  /**
+   * The locale codes the backend actually emits (e.g. `['en', 'zh-TW']`). When
+   * provided, **only** a line that exactly matches one of these (case-insensitive)
+   * is treated as a locale marker — so an ordinary one-word body line (`ok`,
+   * `yes`, …) can no longer be mistaken for a segment boundary and silently
+   * truncate the document. When omitted, any locale-shaped line is a marker
+   * (legacy behavior).
+   */
+  knownLocales?: string[];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -32,16 +41,32 @@ interface LocaleSegment {
 }
 
 /**
+ * Whether `line` introduces a new locale segment. A line must look like a locale
+ * code; additionally, when `knownLocales` is given, it must be one of them
+ * (case-insensitive) — otherwise a stray body line like `ok` would falsely open
+ * a segment and silently drop everything after it.
+ */
+function isLocaleMarker(line: string, knownLocales?: string[]): boolean {
+  const trimmed = line.trim();
+  if (!LOCALE_MARKER.test(trimmed)) return false;
+  if (knownLocales && knownLocales.length > 0) {
+    const lower = trimmed.toLowerCase();
+    return knownLocales.some((l) => l.toLowerCase() === lower);
+  }
+  return true;
+}
+
+/**
  * Split the multi-locale `content` blob into segments. Each segment starts with
  * a line that is just a locale code; everything up to the next such line is that
  * locale's markdown.
  */
-function splitByLocale(content: string): LocaleSegment[] {
+function splitByLocale(content: string, knownLocales?: string[]): LocaleSegment[] {
   const segments: { locale: string; lines: string[] }[] = [];
   let current: { locale: string; lines: string[] } | undefined;
 
   for (const line of content.split(/\r?\n/)) {
-    if (LOCALE_MARKER.test(line.trim())) {
+    if (isLocaleMarker(line, knownLocales)) {
       current = { locale: line.trim(), lines: [] };
       segments.push(current);
     } else if (current) {
@@ -161,7 +186,10 @@ export function normalizeConsent(
     );
   }
 
-  const segment = selectSegment(splitByLocale(raw.content), options.locale);
+  const segment = selectSegment(
+    splitByLocale(raw.content, options.knownLocales),
+    options.locale,
+  );
   const { body, checkboxes } = parseSegment(segment.markdown);
 
   // Pull the title out of the body so callers can render it separately; the

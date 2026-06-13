@@ -28,8 +28,6 @@ export interface ConsentCheckbox {
  * Kept JSON-serializable on purpose so it can cross an RSC → client boundary.
  */
 export interface ConsentData {
-  /** Optional document id (e.g. for submitting the consent decision). */
-  id?: string;
   /** Display title. Falls back to the markdown's first H1 during normalization. */
   title: string;
   /** Markdown source of the consent body (checkbox items extracted out). */

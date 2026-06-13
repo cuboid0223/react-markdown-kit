@@ -68,21 +68,20 @@ cross an RSC → client boundary unchanged.
 
 | Field             | Type               | Notes                                                          |
 | ----------------- | ------------------ | -------------------------------------------------------------- |
-| `id?`             | `string`           | Optional document id (e.g. for submitting the decision).       |
 | `title`           | `string`           | Display title; falls back to the body's first H1.              |
 | `contentMarkdown` | `string`           | Markdown body, with the title H1 and checkbox items extracted out. |
 | `checkboxes`      | `ConsentCheckbox[]`| Parsed from task-list items (`- [ ]` / `- [x]`).               |
 | `status`          | `ConsentStatus`    | Overall lifecycle status (from the backend's numeric `status`).|
 | `locale?`         | `string`           | The locale segment this data was resolved from, when known.    |
-| `version?`        | `string`           | Document version, passed through from the payload.             |
+| `version?`        | `string`           | Document version. This is the consent **identity** — a decision is recorded against a `version`, not a locale; submit it when recording consent. |
 
 ### `ConsentCheckbox`
 
 | Field             | Type      | Notes                                                  |
 | ----------------- | --------- | ------------------------------------------------------ |
-| `id`              | `string`  | Stable id, unique within a `ConsentData` (`cb-0`, …).  |
-| `label`           | `string`  | Plain-text label shown next to the box.                |
-| `required`        | `boolean` | Currently always `true` (consent boxes must be ticked).|
+| `id`              | `string`  | Stable id, unique within a `ConsentData` (`cb-0`, …). Positional. |
+| `label`           | `string`  | Label **inline-markdown** source (links / bold / em); rendered, not shown literally. |
+| `required`        | `boolean` | Always `true` — every consent box must be ticked. Optional/marketing opt-ins are out of scope for this component. |
 | `defaultChecked?` | `boolean` | Initial state, from the `[x]` marker. Default `false`. |
 
 ### `ConsentStatus`
@@ -101,9 +100,15 @@ call it directly inside an RSC after fetching.
 ```ts
 function normalizeConsent(
   raw: unknown,
-  options?: { locale?: string },
+  options?: { locale?: string; knownLocales?: string[] },
 ): ConsentData;
 ```
+
+> **`knownLocales`** — pass the locale codes your backend actually emits (e.g.
+> `['en', 'zh-TW']`). Only a line matching one of them counts as a segment
+> boundary, so an ordinary one-word body line (`ok`, `yes`, …) can't be mistaken
+> for a locale marker and silently truncate the document. Strongly recommended in
+> production; when omitted, any locale-shaped line is treated as a marker.
 
 **Expected raw payload**
 
@@ -136,6 +141,7 @@ function normalizeConsent(
 ```ts
 const data = normalizeConsent(await fetchConsent('/consent/123'), {
   locale: 'zh-TW',
+  knownLocales: ['en', 'zh-TW'],
 });
 ```
 
@@ -147,16 +153,21 @@ en
 
 By continuing you agree to our terms.
 
-- [ ] I accept the terms
-- [x] Subscribe to the newsletter
+- [ ] I have read and accept the [terms](https://example.com/terms)
+- [ ] I consent to the processing of my personal data
 
 zh-TW
 # 服務條款
 
 繼續即表示您同意條款。
 
-- [ ] 我接受條款
+- [ ] 我已閱讀並同意[服務條款](https://example.com/terms)
+- [ ] 我同意個人資料之處理
 ```
+
+> Every checkbox is a **required** consent gate; labels may contain inline
+> markdown (links/bold). Optional, non-gating opt-ins (e.g. a newsletter
+> subscription) are not this component's job — render those separately.
 
 ---
 
@@ -182,10 +193,11 @@ same-origin fetch), renders the markdown body, and tracks checkbox state plus
 
 | Option         | Type                  | Notes                                                            |
 | -------------- | --------------------- | ---------------------------------------------------------------- |
-| `data?`        | `ConsentData`         | Pre-normalized data (e.g. from an RSC). Takes priority.          |
-| `fetchOptions?`| `ConsentFetchOptions` | Same-origin client fetch; used **only** when `data` is absent.   |
-| `locale?`      | `string`              | Locale segment to resolve (client/fetch path). Ignored with `data`.|
-| `markdown?`    | `UseMarkdownOptions`  | Forwarded to the markdown renderer for the body.                 |
+| `data?`         | `ConsentData`         | Pre-normalized data (e.g. from an RSC). Takes priority.          |
+| `fetchOptions?` | `ConsentFetchOptions` | Same-origin client fetch; used **only** when `data` is absent.   |
+| `locale?`       | `string`              | Locale segment to resolve (client/fetch path). Ignored with `data`.|
+| `knownLocales?` | `string[]`            | Forwarded to `normalizeConsent` on the fetch path; see above. Ignored with `data`. |
+| `markdown?`     | `UseMarkdownOptions`  | Forwarded to the markdown renderer for the body.                 |
 
 ### Result — `UseConsentResult`
 
@@ -204,7 +216,13 @@ same-origin fetch), renders the markdown body, and tracks checkbox state plus
 - When `data` is provided, no fetch happens and `loading` starts `false`.
 - The client fetch re-runs when `locale`, `endpoint`, `method`, or `payload`
   change; it aborts on unmount/change via `AbortController`.
-- Checkbox state resets to `defaultChecked` whenever the underlying document changes.
+- Checkbox state resets to `defaultChecked` only when the **document** changes —
+  keyed on `version` (consent is per-version; locale is pure i18n), not on the
+  `data` object's identity. So an unrelated parent re-render that recreates the
+  `data` object will **not** wipe the user's ticks, and switching locale on the
+  same version keeps them. As a safety guard, a change in the **number** of
+  checkboxes under the same version also resets, rather than carrying a tick onto
+  a different clause.
 
 ### `ConsentFetchOptions`
 
@@ -230,14 +248,16 @@ Renders the consent `title` as a separate `<h1>` (company prose theme), then the
 consent body, then its checkboxes. `ConsentRendererProps` extends
 `UseConsentOptions`, plus:
 
-| Prop              | Type                                        | Default            | Notes                                            |
-| ----------------- | ------------------------------------------- | ------------------ | ------------------------------------------------ |
-| `className?`      | `string`                                    | —                  | Appended to the consent wrapper.                 |
-| `onChange?`       | `(checkboxes: ConsentCheckboxState[]) => void` | —               | Fires whenever any checkbox toggles.             |
-| `showCheckboxes?` | `boolean`                                   | `true`             | Render the checkbox list.                        |
-| `components?`     | `{ Checkbox?: ConsentCheckboxComponent }`   | native `<input>`   | Override the checkbox slot.                      |
-| `loadingFallback?`| `ReactNode`                                 | `null`             | Shown during a client fetch.                     |
-| `renderError?`    | `(error: Error) => ReactNode`               | —                  | Rendered when a client fetch fails.              |
+| Prop                | Type                                        | Default            | Notes                                            |
+| ------------------- | ------------------------------------------- | ------------------ | ------------------------------------------------ |
+| `className?`        | `string`                                    | —                  | Appended to the consent wrapper.                 |
+| `onChange?`         | `(checkboxes: ConsentCheckboxState[]) => void` | —               | Fires whenever any checkbox toggles.             |
+| `onValidityChange?` | `(allRequiredChecked: boolean) => void`     | —                  | Fires when the required-checkbox gate flips. **Drive your submit button's `disabled` from this** — it's the single source of truth, since a custom/Radix checkbox slot has no native `required` to block submission. |
+| `renderStatus?`     | `(args: { status; data }) => ReactNode`     | —                  | Overrides what renders when `status` is not `pending`. By default a `consented` / `expired` document renders **nothing** (never re-presents a signable form). |
+| `showCheckboxes?`   | `boolean`                                   | `true`             | Render the checkbox list.                        |
+| `components?`       | `{ Checkbox?: ConsentCheckboxComponent }`   | native `<input>`   | Override the checkbox slot.                      |
+| `loadingFallback?`  | `ReactNode`                                 | `null`             | Shown during a client fetch.                     |
+| `renderError?`      | `(error: Error) => ReactNode`               | —                  | Rendered when a client fetch fails.              |
 
 ### Server-fetched (RSC) usage
 
@@ -257,22 +277,25 @@ export default async function Page() {
 // app/consent/consent-form.tsx
 'use client';
 import { useState } from 'react';
-import {
-  ConsentRenderer,
-  type ConsentData,
-  type ConsentCheckboxState,
-} from 'hcm-consent';
+import { ConsentRenderer, type ConsentData } from 'hcm-consent';
 
 export function ConsentForm({ data }: { data: ConsentData }) {
   const [ok, setOk] = useState(false);
+
+  async function record() {
+    // The library stops at gating; you record the decision. Submit the
+    // document `version` (the consent identity) to your own endpoint.
+    await fetch('/api/consent', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ version: data.version }),
+    });
+  }
+
   return (
-    <form>
-      <ConsentRenderer
-        data={data}
-        onChange={(cbs: ConsentCheckboxState[]) =>
-          setOk(cbs.filter((c) => c.required).every((c) => c.checked))
-        }
-      />
+    <form action={record}>
+      {/* `allRequiredChecked` is the single source of truth for the gate. */}
+      <ConsentRenderer data={data} onValidityChange={setOk} />
       <button type="submit" disabled={!ok}>Agree</button>
     </form>
   );
@@ -330,10 +353,18 @@ interface ConsentCheckboxComponentProps {
 ## Notes & gotchas
 
 - **Checkboxes are always `required: true`.** The markdown carries no per-box
-  optional flag, so every parsed box gates `allRequiredChecked`.
-- **`label` is plain text**, not markdown — checkbox lines are pulled out before
-  the body is rendered.
+  optional flag, so every parsed box gates `allRequiredChecked`. Optional,
+  non-gating opt-ins are out of scope — render them outside this component.
+- **`label` is inline markdown** (links / bold / em), rendered via the markdown
+  layer. Embedded links open in a new tab and don't toggle the box. Block-level
+  markdown in a label is not supported.
+- **Recording consent is the consumer's job.** The library gates (exposes
+  `allRequiredChecked` / `onValidityChange`) but never submits. Record the
+  decision against `data.version` via your own same-origin endpoint.
+- **Consent is per-`version`, not per-locale.** Locale is purely i18n; signing a
+  version in one locale covers it in all. `status` reflects that version.
 - **`headers`/cookies:** the library never injects auth. For the client path, the
   endpoint must be same-origin so the cookie rides along.
 - **Locale matching is case-insensitive**, with a first-segment fallback — a
-  missing locale never throws, it just falls back.
+  missing locale never throws, it just falls back. Pass `knownLocales` so stray
+  body lines can't be misread as locale markers.
