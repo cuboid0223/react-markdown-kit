@@ -7,7 +7,7 @@ export type MdToReactElementOptions = Omit<MarkdownProps, 'content'>;
  * Pure helper: turn a markdown string into a React element.
  *
  * Returns an element — the actual rendering (and any hooks inside
- * react-markdown) runs when React mounts it, so call this anywhere you
+ * markdown-to-jsx) runs when React mounts it, so call this anywhere you
  * can place JSX.
  *
  * @example

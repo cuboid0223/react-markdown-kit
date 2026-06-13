@@ -13,8 +13,24 @@
 @plugin "@tailwindcss/typography";
 
 /*
- * Brand tokens — 👉 replace with real company values.
- * These feed utilities like `text-brand-heading`, `border-brand-quote`, etc.
+ * Brand token CONTRACT — the prose utilities in `BRAND_PROSE` (src/styles/
+ * tokens.ts) resolve to these four variables. This is the package's theming
+ * API; the names below are stable, the values are not.
+ *
+ * The values here are FALLBACK defaults, only used when someone imports the
+ * pre-compiled `dist/styles.css` standalone.
+ *
+ * 👉 AT THE COMPANY (preferred): don't import this file's compiled CSS. Define
+ *    these same four variables in your shared Tailwind v4 `@theme`, mapped to
+ *    your design tokens, and let your build generate the utilities (see the
+ *    "Alternative" section in README.md). Template to paste into your @theme:
+ *
+ *    @theme {
+ *      --color-brand-heading: var(--TODO-company-heading);  TODO: 公司標題色
+ *      --color-brand-link:    var(--TODO-company-link);     TODO: 公司連結色
+ *      --color-brand-code:    var(--TODO-company-code);     TODO: 公司行內 code 色
+ *      --color-brand-quote:   var(--TODO-company-quote);    TODO: 公司引言邊框色
+ *    }
  */
 @theme {
   --color-brand-heading: #0b3d91;

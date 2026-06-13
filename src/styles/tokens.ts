@@ -1,5 +1,5 @@
 /** Class-name prefix applied to the wrapping element. */
-export const CLASS_PREFIX = 'rmk';
+export const CLASS_PREFIX = 'hcm';
 
 /**
  * Default brand classes applied to the markdown wrapper.

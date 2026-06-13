@@ -19,6 +19,6 @@ export function useMarkdown(
   return useMemo(
     () => <Markdown content={content} {...options} />,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [content, JSON.stringify(options.components), options.className],
+    [content, JSON.stringify(options.options), options.className, options.brand],
   );
 }

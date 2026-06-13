@@ -1,12 +1,10 @@
-import type { ComponentProps } from 'react';
-import type { Components } from 'react-markdown';
-import ReactMarkdown from 'react-markdown';
+'use client';
+
+import { Fragment } from 'react';
+import MarkdownToJsx, { type MarkdownToJSX } from 'markdown-to-jsx';
 import { BRAND_PROSE, CLASS_PREFIX } from '../styles/tokens';
 
-type ReactMarkdownProps = ComponentProps<typeof ReactMarkdown>;
-
-export interface MarkdownProps
-  extends Omit<ReactMarkdownProps, 'children' | 'components'> {
+export interface MarkdownProps {
   /** The markdown source string to render. */
   content: string;
   /**
@@ -20,16 +18,19 @@ export interface MarkdownProps
    * @default true
    */
   brand?: boolean;
-  /** Override the rendering of specific elements (passed to react-markdown). */
-  components?: Components;
+  /**
+   * Options passed through to markdown-to-jsx — most usefully `overrides`, to
+   * replace the rendering of specific elements.
+   */
+  options?: MarkdownToJSX.Options;
 }
 
 /**
  * Renders a markdown string as React elements, styled with the company
- * Tailwind Typography (`prose`) theme.
+ * Tailwind Typography (`prose`) theme. Built on markdown-to-jsx.
  *
  * Requires the stylesheet to be imported once in the consuming app:
- *   import '@your-org/react-markdown-kit/styles.css';
+ *   import 'hcm-consent/styles.css';
  *
  * @example
  * <Markdown content="# Hello **world**" />
@@ -38,18 +39,20 @@ export function Markdown({
   content,
   className,
   brand = true,
-  components,
-  ...rest
+  options,
 }: MarkdownProps) {
   const wrapperClass = [`${CLASS_PREFIX}-root`, brand && BRAND_PROSE, className]
     .filter(Boolean)
     .join(' ');
 
+  // Default to a Fragment wrapper so the markdown elements sit directly under
+  // our prose wrapper (keeps `prose > :first-child` rules working). Consumers
+  // can override via `options.wrapper`.
+  const mergedOptions: MarkdownToJSX.Options = { wrapper: Fragment, ...options };
+
   return (
     <div className={wrapperClass}>
-      <ReactMarkdown components={components} {...rest}>
-        {content}
-      </ReactMarkdown>
+      <MarkdownToJsx options={mergedOptions}>{content}</MarkdownToJsx>
     </div>
   );
 }
